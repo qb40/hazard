@@ -1,0 +1,1024 @@
+I'm assuming you mean PS/2 since you said "mouse port".
+Keyboard controller: http://heim.ifi.uio.no/~stanisls/helppc/8042.html
+"Mouse" PS/2 port: http://pinouts.ru/Inputs/PS2Mouse_pinout.shtml
+Mouse details: http://www.computer-engineering.org/index.php?title=PS/2_Mouse_Interface and http://www.win.tue.nl/~aeb/linux/kbd/scancodes-13.html and links at bottom of http://paginas.fe.up.pt/~jcard/ensino/LabC/docs/PICmicro/mouse/mouse.html
+
+The two mini-DIN PS/2 ports are exactly identical and I have used that fact for some of my programs. 
+I wrote one that allows you to use two keyboards in DOS, one of course plugged into the auxillary 
+(aka "mouse") port, and some that play with the LEDs on that extra keyboard. You can identify the device
+ type by issuing a reset (0xFF) or identify device (0xF2) command.
+
+There are only a few differences between communicating with devices on each port. Each has a different IRQ
+ and you can send to/receive from the primary port naturally. Receiving from the auxillary port is also fairly
+ natural but sending requires you issue a command to the keyboard controller to override the default behavior
+ of sending to the primary port (this must be done for every byte sent). The only complication is that modern
+ keyboard controllers include the ability to automatically translate scancode sets from data received by the
+ primary port ("keyboard port"). Some do not allow you to turn this feature off which gets in your way if you
+ wish to have a mouse plugged in there, since they do not use scancodes and the translation would corrupt
+ mouse packets. There are other possible things can can imaginably occur, like I bet somewhere out there that
+ there's a keyboard controller that automatically responds to resets and get ID commands without querying the
+ external device, things like that
+
+When you say that you do not want to use interrupts, I assume you mean no BIOS or driver APIs but I recommend
+ that you use the hardware interrupts for the keyboard controller. 
+
+
+PS2 ports use synchronous serial signals to communicate between computer and keyboard or mouse
+
+
+Data transmission from the mouse to the computer is done as in figure 1, each clock period is usually between 70 to 150 microseconds (10 to 25 microseconds for transitions and 30 to 50 microseconds for high or low state), some may feel that these are large margins both this works good since this is a synchronous port (this also helps cut on the cost of high precision clocks). The data line transition is made on the falling edge of the clock signal and is usually sampled when the clock is low. Each data packet is composed of 11 bits, 1 start bit (which is low), 8 data bits, 1 odd parity bit and 1 stop bit (high).
+ 
+Pin 	Name 	Dir 	Description
+1 	DATA 	<-> 	Key Data
+2 	n/c 	- 	Not connected
+3 	GND 	--- 	Gnd
+4 	VCC 	--> 	Power , +5 VDC
+5 	CLK 	--> 	Clock
+6 	n/c 	- 	Not connected
+Note: Direction is Computer relative Mouse.
+
+ 
+Data
+
+Mouse data packets or keyboard scan codes are sent from the mouse or keyboard to the computer on this single wire serially.
+Clock
+
+This signal is sent from the mouse or keyboard to synchronise the data signal.
++5 Vdc
+
+This is a simple 5 volts signal for giving power to the mouse or keyboard.
+Ground
+
+This is a common ground signal used as a return path for data and is a reference to logical 0.
+
+When the PS2 mouse sends it"s information it must send 3 consecutive data packets in a row. Each packet sent has different information for button pressed, movement and direction of movement. The table below shows what information is sent in each packet. Please remember that this information is of general nature and can change from one manufacturer to another. This is for a 2 button mouse.  I have no idea what bit is used for other types of mice, like those with 3 buttons or with scrolling wheels.
+
+ 
+  	D7 	D6 	D5 	D4 	D3 	D2 	D1 	D0
+1st 	YV 	XV 	YS 	XS 	1 	0 	R 	L
+2nd 	X7 	X6 	X5 	X4 	X3 	X2 	X1 	X0
+3rd 	Y7 	Y6 	Y5 	Y4 	Y3 	Y2 	Y1 	Y0
+
+
+ 
+L 	Left Button State (1 = pressed down)
+R 	Right Button State (1 = pressed down)
+X0-X7 	Movement in the X direction
+Y0-Y7 	Movement in the Y direction
+XS 	Direction of movement in the X axis (1 = UP)
+YS 	Direction of movement in the Y axis (1 = LEFT)
+XV,YV 	Overflow in the movement data bits (1 = overflow has occured)
+
+
+The X and Y direction bits send the number of bits you moved since the last time this information was sent, the actual direction of the movement is sent in the XS and XY bits. If the movement of the mouse was higher than 255 data displacements since the information was last sent the overflow bit will go to one and will reset back to 0 as soon as the current data is sent. The way the driver handles overflow can change from one mouse driver to another, some may move the pointer 256 data bits and some may even decide to leave the pointer where it is! Some of you might wonder what exactly are the data bits sent for the movement bits, you will be able to shortly find this out in the i/o devices section on mice which will be online shortly!
+PS2 <-> COM MOUSE ADAPTERS
+
+Many of you asked how to connect serial mice to PS2 ports and vice-versa. This is a very touchy subject and I wouldn't recommend to anyone to go ahead and try make these adapters on your own risk. Most mice are either built for PS2 or serial ports and some are built for both, in the later case the appropriate adapters are supplied with the mouse when you buy it or can be purchased as an option.
+Because of the nature of the ports the two kinds of mice are not directly compatible. They don't send out the information in the same matter (different protocols) and don't use the same signal levels, PS2 mice uses TTL logic signals (0-5 volts) and serial mice use RS232 signals (typically +10 volts - -10 volts). Power is also different for COM and PS/2 mice; both-purpose mouse must accept -25..+25 on the power pin without any damage, and work with +5 to +10.
+
+When a COM mouse is built for operation on both ports, it comes with the 9 pin D-Shell used in serial mice.  These connectors have 9 pins and the serial mouse only uses between 5 and 8 pins. This leaves us with at least 1 spare line, this is the line that the PS2 data portion of the mouse will use for sending it's information. So as you can see, the adapters are designed to work on a particular make and model and are not usually compatible with other mice. Some sources refer to this adapter (which is, probably, most often used):
+COM mouse name 	COM # 	PS/2 # 	PS/2 name
+power +5/+10 	4+7+9 	4 	+5V
+extra (PS/2) data pin 	1 	1 	Data
+TXD+GND 	3+5 	3 	Gnd
+extra (PS/2) clock pin 	6 	5 	Clock
+
+When a PS/2 mouse is built for operation on both ports, things are little better. Most PS/2 COM-compatible mice use PS/2 pins 2 and 6 to provide extra lines for COM-compatibility. This assumes the following adaptor:
+PS/2 mouse name 	PS/2 # 	COM # 	COM name
+GND 	3 	5 	GND
+extra (COM) RxD 	2 	2 	RxD
+extra (COM) TxD 	6 	3 	TxD
+power +5/+10 	4 	7 	RTS
+
+In both cases, there is just chances any of these adaptors will work. If pins 2 and 6 in a PS/2 mouse are not connected to anything (this can be checked with a multitester), PS/2 mouse has no COM-support.
+Mouse resolution and tracking rate
+
+The standard PS/2 mouse (with Logitech mouse) defaults to 160 CPI and can be switched to 40, 80, 160 or 320 CPI
+ with software. Microsoft mouse driver for Windows 3.x and Windows 95 defauls to 160 couns per inch. The maximum
+ tracking rate for PS/2 mouse is 40 report/second * 255 counts per report = 10200 counts per second. For 100 CPI
+ mouse this would indicate maximum trackign rate of 102 inches per second and for 400 CPI mouse only 25.2
+ inches per second.
+
+Bi-directional transmission is controlled by the CLK and DATA lines. Both are fed by an open collector device which
+ lets either host or mouse force the line to "0". During non-transmission, CLK is at "1" and DATA can be at "0" or "1".
+
+The host can inhibit mouse transmission by forcing CLK to "0". If the host inhibits the mouse while it is transmitting,
+ the byte must be retransmitted (if the inhibit state arrived before the 11th clock).
+
+There is a simple description in my old IBM PS/2 model 50/60 technical reference. The mouse interface is the same as
+ the keyboard interface. The Intel 8042 supports two channels, one for keyboard and one for the auxiliary device (mouse,
+ trackball, touchpad). Pin 1 is the data, pin3 ground, pin 4 +5V and pin 5 clock.
+
+Receiving data: Check "clock". If inactive, there is a bit on the "data" line. Each transmission unit is one start bit,
+ eight data bits, odd parity and one stop bit. Start bits are low, stop bits high. Each clock active or inactive
+ period is 30 to 50 microseconds. Data transition to falling edge of clock is 5 to 25 microseconds.
+
+Sending: Check that both clock and data are high. Pull down data for start bit, and start clocking.
+
+NOTE: Logitech has made their own extension also to this protocol to allow three buttons. 
+Mouse movement detectors
+
+The most tyical construction of mouse movement detectors are optomechanical detectors. The system works so that X
+ and Y movement of the mouse rotates slotted disks. The movement info is then picked from those slotted disks using
+ optical sensors. There are two sensors for each slotted disk and those sensors give out two singals which are 90
+ degreed out of phase compared to each other.
+
+sensor #0 ----    ----    ----    ----   light
+              ----    ----    ----       no light
+
+sensor #1   ----    ----    ----    --   light
+          --    ----    ----    ----    no light
+
+So if we call the getting light phase "1", and the not getting light phase (when the light is blocked by the wheel) "0" then it looks like this:
+
+sensor #0 - 1111000011110000111100001111
+sensor #1 - 0011110000111100001111000011
+            ^^^^^^^^
+            full cycle of pulses
+
+This can be decoded into four discrete bit pairs for the two sensors:
+
+         Forward direction     Backwards direction
+            0 1 2 3                3 2 1 0
+sensor #0 - 1 1 0 0                0 0 1 1
+sensor #1 - 0 1 1 0                0 1 1 0
+
+This information can be easily decoded usign small microcontroller and then sent to computer in correct format.
+
+ 
+
+Want to add or correct something here? Edit this page! 	
+6 pin mini-DIN male (PS/2 STYLE) connector layout
+6 pin mini-DIN male (PS/2 STYLE) connector
+at the mouse cable
+Related pinouts:
+
+PS/2 to Serial Mouse adapter
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+13. The PS/2 Mouse
+
+Mice come in various flavours - serial mice, PS/2 mice, busmice, USB mice. Below a little about mice using the PS/2 protocol, since these also use the keyboard controller.
+
+A mouse has a number of buttons (1-5 is common) and must report button presses. It has some way of detecting motion, and must report the amount of movement in the X and Y direction, usually as differences with the previously reported position, in a (dx,dy) pair. Touchpads can also report absolute position.
+
+Reports come in the form of mouse packets of between 1 and 8 bytes. Various protocols are in use.
+
+13.1 Modes
+
+A PS/2 mouse can be in stream mode (the default). In this mode it produces a stream of packets indicating mouse movements and button presses. Or it can be in remote mode. In this mode the mouse only sends a packet when the host requests one, using the eb command. Finally, it can be in echo ("wrap") mode, in which everything the host sends is echoed back, until either a reset (ff) or clear echo mode (ec) is received.
+
+13.2 Scaling
+
+Scaling can be set to 1:1 or 2:1. This affects stream mode only. In 2:1 scaling: If the unscaled absolute value of dx or dy is 6 or more, it is doubled. Otherwise, for the unscaled value 0,1,2,3,4,5,6, the scaled value 0,1,1,3,6,9,12 is sent.
+
+13.3 PS/2 mouse protocol
+
+The default protocol
+
+The standard PS/2 protocol uses 3-byte packets, as follows:
+
+Yovfl 	Xovfl 	dy8 	dx8 	1 	Middle Btn 	Right Btn 	Left Btn
+dx7 	dx6 	dx5 	dx4 	dx3 	dx2 	dx1 	dx0
+dy7 	dy6 	dy5 	dy4 	dy3 	dy2 	dy1 	dy0
+
+It gives the movement in the X and Y direction in 9-bit two's complement notation (range -256 to +255) and an overflow indicator. It also gives the status of the three mouse buttons. When this protocol is used, the f2 Read mouse ID command is answered by 00.
+
+Intellimouse
+
+The Microsoft Intellimouse uses the above protocol until scrolling wheel mode is activated by sending the magic sequence f3 c8 f3 64 f3 50 (set sample rate 200, 100, 80). In this mode, the Read mouse ID command returns 03, and 4-byte packets are used:
+
+Yovfl 	Xovfl 	dy8 	dx8 	1 	Middle Btn 	Right Btn 	Left Btn
+dx7 	dx6 	dx5 	dx4 	dx3 	dx2 	dx1 	dx0
+dy7 	dy6 	dy5 	dy4 	dy3 	dy2 	dy1 	dy0
+dz3 	dz3 	dz3 	dz3 	dz3 	dz2 	dz1 	dz0
+
+Here the last byte gives the movement of the scrolling wheel in 4-bit two's complement notation (range -8 to +7) and the leading four bits are just copies of the sign bit.
+
+Intellimouse Explorer mouse
+
+The Explorer mouse protocol allows for scrolling wheel and five buttons. It is activated by first sending the magic sequence for Intellimouse, and then, when the Intellimouse ID has been seen, sending the magic sequence f3 c8 f3 c8 f3 50 (set sample rate 200, 200, 80). In this mode, the Read mouse ID command returns 04, and 4-byte packets are used:
+
+Yovfl 	Xovfl 	dy8 	dx8 	1 	Middle Btn 	Right Btn 	Left Btn
+dx7 	dx6 	dx5 	dx4 	dx3 	dx2 	dx1 	dx0
+dy7 	dy6 	dy5 	dy4 	dy3 	dy2 	dy1 	dy0
+0 	0 	5th Btn 	4th Btn 	dz3 	dz2 	dz1 	dz0
+
+Lots of other protocols occur, and only incomplete data is known about most of them. Some examples.
+
+Typhoon mouse
+
+The Typhoon optical mouse is reported to send 6-byte packets. Bytes 1-3 are as for the default PS/2 protocol. Byte 4 equals byte 1. Byte 5 gives the Z axis movement, one of ff, 00, 01. Byte 6 is 0. Of course the idea is that this packet looks like two ordinary packets and ordinary PS/2 mouse drivers will handle it. The 6-byte mode is activated by sending the magic sequence f3 c8 f3 64 f3 50 f3 3c f3 28 f3 14 (set sample rate 200, 100, 80, 60, 40, 20). It is recognized by the ID 08.
+
+13.4 Mouse Commands
+
+Every command or data byte sent to the mouse (except for the resend command fe) is ACKed with fa. If the command or data is invalid, it is NACKed with fe. If the next byte is again invalid, the reply is ERROR: fc.
+
+Command d0: Read extended ID
+
+Read up to 256 bytes.
+
+Commands d1-df: Vendor unique commands
+
+Command d1: Logitech PS/2++ command
+
+This command was to be used, followed by an arbitrary data sequence. Now replaced by the sliced commands using e8.
+
+Command e1: Read secondary ID
+
+    Replies with two bytes. An IBM TrackPoint returns 01 as first byte, and a second byte depending on the model. 
+
+Command e2: IBM TrackPoint command
+
+    Followed by several parameter bytes. For details, see ykt3dext.pdf. 
+
+Command e6: Set mouse scaling to 1:1
+
+    Often ingredient in magic sequences. 
+
+Command e7: Set mouse scaling to 2:1
+
+    Often ingredient in magic sequences. 
+
+Command e8: Set mouse resolution
+
+    This command is followed by a byte indicating the resolution (0, 1, 2, 3: 1, 2, 4, 8 units per mm, respectively). It is used in magic sequences to transport two bits, so that four of these are needed to send a byte to the mouse. See below. 
+
+Command e9: Status request
+
+    This command returns three bytes:
+
+    First a status byte: Bit 7: unused, 0. Bit 6: 0: stream mode, 1: remote mode. Bit 5: 0: disabled, 1: enabled. Bit 4: 0: scaling set to 1:1, 1: scaling set to 2:1. Bit 3: unused, 0. Bit 2: 1: left button pressed. Bit 1: 1: middle button pressed. Bit 0: 1: right button pressed.
+
+    Then a resolution byte: 0, 1, 2, 3: 1, 2, 4, 8 units per mm, respectively.
+
+    Finally a sample rate (in Hz).
+
+    See below for special Synaptics Touchpad handling. 
+
+Command ea: Set stream mode
+
+Command eb: Read data
+
+    Read a mouse packet. Needed in remote mode to ask the mouse for data. Also functions in stream mode. 
+
+Command ec: Clear echo mode
+
+Command ee: Set echo mode
+
+Command f0: Set remote mode
+
+Command f2: Read mouse ID
+
+    (Only supported on some systems.) This command reads a 1-byte mouse ID. The reply is a single byte 00. Wait at least 10ms after issuing this command.
+
+    For the keyboard reply, see above.
+
+    BallPoint (trackball) devices return a single byte 02, Intellimouse returns 03, Explorer Mouse returns 04, 4d Mouse returns 06, 4dplus Mouse returns 08,as does the Typhoon mouse. 
+
+Command f3: Set mouse sample rate
+
+    (Only supported on some systems.) Set mouse sample rate in Hz. If the given sampling rate is acceptable the ACK is fa. Otherwise the NACK is fe, and the host can correct. If it is incorrect again fc is sent. Correct values are, e.g., 10, 20, 40, 60, 80, 100, 200. 
+
+Command f4: Mouse enable
+
+    The stream mode mouse data reporting is disabled after a reset and after the disable command. This command enables it again. 
+
+Command f5: Mouse disable
+
+    This stops mouse data reporting in stream mode. In stream mode, this command should be sent before sending any other commands. 
+
+Command f6: Set defaults
+
+    If this command is recognized, a reset is done (set sampling rate 100 Hz, resolution 4 counts/mm, stream mode, disabled, scaling 1:1), but no diagnostics are performed. For some enhanced mice that require a magic sequence to get into enhanced mode, this command will reset them to default PS/2 mode. 
+
+Command fe: Resend
+
+    If this command is recognized, the last mouse packet (possibly several bytes) is resent. There is no ACK to this command, but if the last reply was ACK, it is sent. 
+
+Command ff: Mouse reset
+
+    A self-test is performed. When OK, the response is aa 00. On error, the response is fc 00. The mouse is reset to default PS/2 mode. 
+
+13.5 Sliced parameters
+
+For more advanced mouse modes it is necessary to send data to the mouse. There is now a commonly accepted way.
+
+First Logitech tried to use the d1 command followed by an arbitrary data sequence. While the IBM specs reserve d1-df for vendor unique commands, it turns out that not all BIOSes will transmit such codes. So Logitech drops the d1 and uses the sequence e8 aa e8 bb e8 cc e8 dd to transmit the byte aabbccdd, where aa, bb, cc, dd are 2-bit quantities. In this way an arbitrarily long sequence of bytes can be transmitted.
+
+For synchronization purposes it is possible to separate such groups of four e8 commands by an e6 command. Indeed, such separation may be required: Synaptics Touchpads react to e9 or f3 commands preceded by precisely four e8 commands.
+
+Magic knock
+
+For example, the "magic knock" d1 39 db that sets a device that understands it in PS/2++ mode, becomes e8 00 e8 03 e8 02 e8 01 e6 e8 03 e8 01 e8 02 e8 03, abbreviated {E8}0321 {E6} {E8}3123. Note that 0321 and 3123 do not have repeated symbols. If they had, too intelligent intermediate hardware transmitting these sequences might see a superfluous command and suppress it.
+
+Magic unknock
+
+PS/2++ mode is cleared again by the "magic unknock" {E8} 0323 or D1 3B from an external device, and {E8} 0321 or D1 39 from an internal device. (These commands differ so that in setups where the same commands are sent to internal and external devices, they can be commanded separately.)
+
+For a decription of the PS/2++ format, see ps2ppspec.htm.
+
+13.6 Synaptics Touchpad
+
+A few sketchy details. For nice precise information, get the Synaptics interfacing guide.
+
+Status request
+
+When preceded by an 8-bit request number encoded via four e8 commands, the e9 status request returns modified output, somewhat dependent on the Touchpad model.
+
+Request 00: Identify Touchpad
+
+This request returns three bytes, of which the middle one is the constant 47. This is the way to recognize a Touchpad. The low order four bits of the third word contain the major model version number, the first word contains the minor version number, and the high order four bits of the third word contain the (obsolete) model code.
+
+Request 01: Read Touchpad Modes
+
+This request returns three bytes, of which the first two are the constants 3b and 47. The last byte is the mode byte
+
+ABS 	Rate 	- 	- 	Baud/Sleep 	DisGest 	PackSize 	Wmode
+
+Here ABS indicates absolute mode (instead of the default relative mode).
+
+Rate is 0 for 40 packets/sec, 1 for 80 packets/sec. The PS/2 sampling rate value is ignored.
+
+Baud/Sleep indicates the baud rate when used with a serial protocol (0: 1200 baud, 1: 9600 baud). It must be set whenever ABS or Rate is set. When used with the PS/2 protocol this bit indicates sleep mode - a low power mode in which finger activity is ignored and only button presses are reported.
+
+DisGest is the "disable gestures" bit. When set, we have classical mouse behaviour. When cleared, "tap" and "drag" processing is enabled.
+
+PackSize is used for the serial protocol only (and then chooses between 6-, 7- and 8-byte packets, also depending on the Wmode bit).
+
+Wmode is used in absolute mode only. When set the packets also contain the W value. (This value indicates the amount of contact: 0: two-finger contact, 1: three-finger contact, 2: pen contact, 3: reserved, 4-7: ordinary finger contact, 8-15: wide finger or palm contact.)
+
+This described Touchpad 4.x. Earlier models had up to four mode bytes. This request would return mode bytes 1 and 2 in the first and last result byte, and request 02 would return mode bytes 3 and 4.
+
+Request 02: Read Capabilities
+
+This request returns three bytes, of which the middle one is the constant 47. The first and third byte are the high-order and low-order parts of the capability word. (Thus on Touchpad 4.x. On earlier models mode bytes 3 and 4 are returned.)
+
+This capability word has 16 bits. Bit 15 indicates that capabilities are supported. Bit 4 indicates that Sleep is supported (for the PS/2 protocol). Bit 3 indicates that four buttons (Left, Right, Up, Down) are supported. Bit 1 indicates that multi-finger detection is supported. Bit 0 indicates that palm detection is supported.
+
+Request 03: Read Model ID
+
+Request 06: Read Serial Number Prefix
+
+Request 07: Read Serial Number Suffix
+
+Request 08: Read Resolution
+
+Mode setting
+
+When preceded by an 8-bit request number encoded via four e8 commands, the f3 14 (set sample rate 20) command sets the mode byte to the encoded number. (Thus on Touchpads 4.x. Older models have more mode bytes and several such commands.)
+
+13.7 Vendor extensions
+
+There is a complicated forest of "magic sequences" that enable vendor extensions. Recognizing all of these is a very obscure activity.
+
+(Moreover, recognizing these may be counterproductive: if the mouse has special capabilities which are activated by a special sequence, and it is connected to the computer via a KVM switch that does not know about this special protocol, then switching away and back will leave the mouse in the non-special state. This leads to non-functioning mice.)
+
+A 2002 Logitech file describes the following procedure for recognizing the mouse type:
+
+Stage 1: Send ff: reset. The reply is ignored. (Most common is aa 00.)
+
+Stage 2: Send f3 0a f2: set sample rate and ask for ID. If the reply is 02, we have a trackball - it has its own protocol. (The usual reply is 00.)
+
+Stage 3: Send e8 00 e6 e6 e6 e9: set resolution and scaling (three times), and request status. The reply consists of three bytes s1 s2 s3. An old-fashioned mouse would report 0 in the second status byte s2 (since that is the resolution and we just set it).
+
+If s2 is nonzero then: s2 is the number of buttons, s3 is the firmware revision, s1 has the firmware ID (device type) bits 6-0 in bits 3-0,6-4, while bit 7 of s1 indicates support for the e7 e7 e7 e9 command.
+
+If s1=d0 and s2=03 and s3=c8, suspect Synaptics.
+
+If s1 and s2 are zero but s3 equals 0a, suspect Alps. (s3=0a is as expected, but s1=0 is not)
+
+Stage 4: If bit 7 of s1 is set, or if we suspect Alps, send e8 00 e7 e7 e7 e9: set resolution and scaling (three times), and request status. The reply consists of three bytes t1 t2 t3. Of course, we already know that this is not an old-fashioned mouse.
+
+If t2=01 and FirmwareID < 0x10 and t1 >> 6 = 1, then conclude that we have a Cordless MouseMan (RA12).
+
+If t2=01 and FirmwareID < 0x10 and t1 >> 6 = 3, then conclude that we have a Cordless MouseMan (RB24).
+
+Other cases with t2=01 are for new cordless mice.
+
+If we suspect Synaptics and t2=0 and t3=0a, then conclude that we have a Synaptics touchpad.
+
+If we suspect Alps and t1=33, then conclude that we have an Alps touchpad.
+
+Stage 5: If we don't know the type yet, send f3 c8 f3 64 f3 50 f2: Set sampling rate to 200, 100, 80 Hz, and ask for ID. The reply is a single byte. If we get 3, conclude that we have an IntelliMouse. (And this sequence is the initialization sequence for the IntelliMouse.)
+
+Stage 6: Send ff: reset. Now the device is no longer in any special state.
+
+Stage 7: If we don't know the type yet, send e8 00 e8 00 e8 00 e8 00 e9: set resolution to 0 (four times), and ask for status. The reply consists of three bytes u1 u2 u3. If u2=47 and u3=13, then conclude that we have a new Synaptics touchpad.
+
+Stage 7a: At this point we can narrow down to model type. If the thing is Synaptics or Alps, then Logitech is no longer interested. If it has 3 buttons, FirmwareID 1 and firmware revision 50, then conclude that it is a Logitech Mouseman.
+
+Stage 8: If we think it is a touchpad, detect whether it has programmable RAM. Send e6 e8 00 e8 00 e8 00 e8 00 e9. The reply consists of three bytes v1 v2 v3. If v1=06 and v2=00, then conclude that we have a Touchpad TP3 with programmable RAM.
+
+Stage 9: Test whether the device understands the Logitech PS/2++ protocol. Send the "magic knock" f5 e8 00 e8 03 e8 02 e8 01 e6 e8 03 e8 01 e8 02 e8 03 f4. Check whether the device replies with an extended report. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+The PS/2 Mouse Interface
+This article is Copyright 2001, Adam Chapweske 
+
+Electrical Interface / Protocol:
+
+The PS/2 mouse uses the same protocol as the PS/2 (AT) keyboard.  This standard originally appeared in the IBM technical reference manual, but I am not aware of any current official publication of this standard.  However, you may click here for the (detailed) information I have gathered about that protocol.
+
+Inputs, Resolution, and Scaling:
+
+The standard PS/2 mouse supports the following inputs: X (right/left) movement, Y (up/down) movement, left button, middle button, and right button. The mouse reads these inputs at a regular freqency and updates various counters and flags to reflect movement and button states.  There are many PS/2 pointing devices that have additional inputs and may report data differently than described in this document.  One popular extension I cover later in this document is the Microsoft Intellimouse, which includes support for the standard inputs as well as a scrolling wheel and two additional buttons.
+
+The standard mouse has two counters that keep track of movement: the X-movement counter and the Y-movement counter.  These  are 9-bit 2's complement values and each has an associated overflow flag.  Their contents, along with the state of the three mouse buttons, are sent to the host in the form of a 3-byte movement data packet (as described in the next section.)  The movement counters represent the amount of movement that has occurred since the last movment data packet was sent to the host.
+
+When the mouse reads its inputs, it records the current state of its buttons, then checks for movement. If movement has occurred, it increments (for +X or +Y movement) or decrements (for -X or -Y movement) its X and/or Y movement counters. If either of the counters has overflowed, it sets the appropriate overflow flag.
+
+The parameter that determines the amount by which the movement counters are incremented/decremented is the resolution. The default resolution is 4 counts/mm and the host may change that value using the "Set Resolution" (0xE8) command.
+
+There is a parameter that does not effect the movement counters, but does effect the reported(1) value of these counters.  This parameter is scaling.  By default, the mouse uses 1:1 scaling, which has no effect on the reported mouse movement.  However, the host may select 1:2 scaling by sending the "Set Scaling 2:1" (0xE7) command.  If 2:1 scaling is enabled, the mouse will apply the following algorithm to the counters before sending their contents to the host:
+ 
+ 
+Movement Counter
+	
+Reported Movement
+0
+	
+0
+1
+	
+1
+2
+	
+1
+3
+	
+3
+4
+	
+6
+5
+	
+9
+N > 5
+	
+2 * N
+
+Movement Data Packet:
+
+The standard PS/2 mouse sends movement (and button) information to the host using the following 3-byte packet (4):
+
+     
+
+    Byte 1  	
+    Bit 7
+    	
+    Bit 6
+    	
+    Bit 5
+    	
+    Bit 4
+    	
+    Bit 3
+    	
+    Bit 2
+    	
+    Bit 1
+    	
+    Bit 0
+    Y overflow
+    	
+    X overflow
+    	
+    Y sign bit
+    	
+    X sign bit
+    	
+    Always 1
+    	
+    Middle Btn
+    	
+    Right Btn
+    	
+    Left Btn
+    Byte 2 	
+    X Movement
+    Byte 3  	
+    Y Movement
+
+The movement counters are 9-bit 2's complement integers, where the most significant bit appears as a sign bit in Byte 1 of the movement data packet. These counters are updated when the mouse reads its input and finds movement has occurred. Their value is the amount of movement that has occurred since the last movement data packet was sent to the host (ie, after a packet is sent to the host, the movement counters are reset.) The range of values that can be expressed by the movement counters is -255 to +255. If this range is exceeded, the appropriate overflow bit is set and the counter is not incremented/decremented until it is reset.
+
+As I mentioned earlier, the movement counters are reset whenever a movement data packet is successfully sent to the host. They are also reset after the mouse receives any command from the host other than the "Resend" (0xFE) command.
+
+Modes of Operation:
+
+Data reporting is handled according to the mode in which the mouse is operating.  There are four standard modes of operation: 
+
+    * Reset - The mouse enters Reset mode at power-up or after receiving the "Reset" (0xFF) command. 
+    * Stream - This is the default mode (after Reset finishes executing) and is the mode in which most software uses the mouse.  If the host has previously set the mouse to Remote mode, it may re-enter Stream mode by sending the "Set Stream Mode" (0xEA) command to the mouse. 
+    * Remote - Remote mode is useful in some situations and may be entered by sending the "Set Remote Mode" (0xF0) command to the mouse. 
+    * Wrap - This mode isn't particularly useful except for testing the connection between the mouse and its host.  Wrap mode may be entered by sending the "Set Wrap Mode" (0xEE) command to the mouse.  To exit Wrap mode, the host must issue the "Reset" (0xFF) command or "Reset Wrap Mode" (0xEC) command.  If the "Reset" (0xFF) command is recieved, the mouse will enter Reset mode.  If the "Reset Wrap Mode" (0xEC) command is received, the mouse will enter the mode it was in prior to Wrap Mode.
+
+(Note: The mouse may also enter "extended" modes of operation, as described later in this document.  However, this is not a feature of the standard PS/2 mouse.)
+
+Reset Mode:
+
+The mouse enters reset mode at power-on or in response to the "Reset" (0xFF) command. After entring this mode, the mouse performs a diagnostic self-test referred to as BAT (Basic Assurance Test) and sets the follwing default values:
+
+    * Sample Rate - 100 samples/sec
+    * Resolution - 4 counts/mm
+    * Scaling - 1:1
+    * Data Reporting Disabled
+
+It then sends a BAT completion code of either 0xAA (BAT successful) or 0xFC (Error). If the host receives a response other than 0xAA, it may cycle the mouse's power supply, causing the mouse to reset and re-execute its BAT.
+
+Following the BAT completion code (0xAA or 0xFC), the mouse sends its device ID of 0x00. This distinguishes it from a keyboard, or a mouse in an extended mode. I have read documents saything the host is not supposed to transmit any data until it receives a device ID.  However I've found that some BIOS's will send the "Reset" (0xFF) command immediately following the 0xAA received after a power-on reset.
+
+After the mouse has sent its device ID to the host, it will enter Stream Mode.  Note that one of the default values set by the mouse is "Data Reporting Disabled".  This means the mouse will not send any movement data packets to the host until the "Enable Data Reporting" (0xF4) command is received.
+
+Stream Mode:
+
+In stream mode, the mouse sends movement data when it detects movement or a change in state of one or more mouse buttons. The maximum rate at which this data reporting may occur is known as the sample rate.  This parameter ranges from 10 samples/sec to 200 samples/sec. Its default value is 100 samples/sec and the host may change that value by using the "Set Sample Rate" (0xF3) command.  Stream mode is the default mode of operation.
+
+Remote Mode:
+
+In this mode, the mouse reads its inputs and updates its counters/flags at the current sampling rate, but it only notifies the host of movement (and change in button state) when that information is requested by the host. The host does this by issuing the "Read Data" (0xEB) command. After receiveing this command, the mouse will send a movement data packet, and reset its movement counters.
+
+Wrap Mode:
+
+This is an "echoing" mode in which every byte received by the mouse is sent back to the host. Even if the byte represents a valid command, the mouse will not respond to that command--it will only echo that byte back to the host. There are two exceptions to this: the "Reset" (0xFF) command and "Reset Wrap Mode" (0xEC) command. The mouse treats these as valid commands and does not echo them back to the host.
+
+Intellimouse Extensions:
+
+A popular extension to the standard PS/2 mouse is the Microsoft Intellimouse.  This includes support for a total of five mouse buttons and three axises of movement (right-left, up-down, and a scrolling wheel).  These additional features require the use of a 4-byte movement data packet rather than the standard 3-byte packet.  Since standard PS/2 mouse drivers cannot recognize this packet format, the Microsoft Intellimouse is required to operate exactly like a standard PS/2 mouse unless it knows the drivers support the extended packet format.  This way, if a Microsoft Intellimouse is used on a computer which only supports the standard PS/2 mouse, the Microsoft Intellimouse will still function, except for its scrolling wheel and 4th and 5th buttons.
+
+The Microsoft Intellimouse operates just like a standard PS/2 mouse (ie, it uses a 3-byte movement data packet, responds to all commands in the same way as a standard PS/2 mouse, and reports a device ID of 0x00.)  To enter scrolling wheel mode, the host sends the following command sequence:
+
+    Set sample rate 200
+    Set sample rate 100
+    Set sample rate 80
+
+The host then issues the "Get device ID" command (0xF2) and waits for a response.  If a standard PS/2 mouse (ie, non-Intellimouse) is attached, it will respond with a device ID of 0x00.  In this case, the host will recognize the fact that the mouse does have a scrolling wheel and will continue to treat it as a standard PS/2 mouse.  However, if a Microsoft Intellimouse is attached, it will respond with an ID of 0x03.  This tells the host that the attached pointing device has a scrolling wheel and the host will then expect the mouse to use the following 4-byte movement data packet:
+
+     
+
+    Byte 1  	
+    Bit 7
+    	
+    Bit 6
+    	
+    Bit 5
+    	
+    Bit 4
+    	
+    Bit 3
+    	
+    Bit 2
+    	
+    Bit 1
+    	
+    Bit 0
+    Y overflow
+    	
+    X overflow
+    	
+    Y sign bit
+    	
+    X sign bit
+    	
+    Always 1
+    	
+    Middle Btn
+    	
+    Right Btn
+    	
+    Left Btn
+    Byte 2 	
+    X Movement
+    Byte 3  	
+    Y Movement
+    Byte 4 	
+    Z Movement
+    Z Movement is a 2's complement number that represents the scrolling wheel's movement since the last data report.  Valid values are in the range of -8 to +7. This means the number is actually represented only by the least significant four bits; the upper four bits act only as sign extension bits.
+
+To enter scrolling wheel + 5 button mode, the host sends the following command sequence:
+
+    Set sample rate 200
+    Set sample rate 200
+    Set sample rate 80
+
+The host then issues the "Get device ID" command (0xF2) and waits for a response.  A Microsoft Intellimouse will respond with a device ID of 0x04, then use the following 4-byte movement data packet:
+
+         
+
+        Byte 1  	
+        Bit 7
+        	
+        Bit 6
+        	
+        Bit 5
+        	
+        Bit 4
+        	
+        Bit 3
+        	
+        Bit 2
+        	
+        Bit 1
+        	
+        Bit 0
+        Y overflow
+        	
+        X overflow
+        	
+        Y sign bit
+        	
+        X sign bit
+        	
+        Always 1
+        	
+        Middle Btn
+        	
+        Right Btn
+        	
+        Left Btn
+        Byte 2 	
+        X Movement
+        Byte 3  	
+        Y Movement
+        Byte 4 	
+        Always 0
+        	
+        Always 0
+        	
+        5th Btn
+        	
+        4th Btn
+        	
+        Z3
+        	
+        Z2
+        	
+        Z1
+        	
+        Z0
+        Z0-Z3 is a 2's complement number which represents the amount of movement that has occurred since the last data report.  Valid values range from -8 to +7.
+        4th Btn: 1 = 4th mouse button is pressed; 0 = 4th mouse button is not pressed.
+        5th Btn: 1 = 5th mouse button is pressed; 0 = 5th mouse button is not pressed.
+
+You may have seen mice with two scrolling wheels--one vertical and the other horizontal.  These mice use the Microsoft Intellimouse data packet format as described above.  If the vertical wheel is scrolled upward, the Z-counter is incremented by one and if that wheel is scrolled down, the Z-counter is decremented by one.  This is normal operation for a scrolling wheel.  However, if the horizontal wheel is scrolled right, the Z-counter is incremented by two and if it is scrolled left, the Z-counter is decremented by two.  This seems like an odd way to implement the second scrolling wheel, but it works since the placement of the two wheels make it impossible to use both of them at the same time (and if you try to trick the software and use both at the same time, it will ignore the horizontal wheel.)
+
+Command Set:
+
+The following are the only commands that may be sent to the mouse... If the mouse is in Stream mode, the host should disable data reporting (command 0xF5) before sending any other commands...
+
+    * 0xFF (Reset) - The mouse responds to this command with "acknowledge" (0xFA) then enters Reset Mode.
+    * 0xFE (Resend) - The host sends this command whenever it receives invalid data from the mouse. The mouse responds by resending the last(2) packet(3) it sent to the host.   If the mouse responds to the "Resend" command with another invalid packet, the host may either issue another "Resend" command, issue an "Error" command, cycle the mouse's power supply to reset the mouse, or it may inhibit communication (by bringing the Clock line low).  The action taken depends on the host.
+    * 0xF6 (Set Defaults) - The mouse responds with "acknowledge" (0xFA) then loads the following values:  Sampling rate = 100, Resolution = 4 counts/mm, Scaling = 1:1, Disable Data Reporting.  The mouse then resets its movement counters and enters stream mode.
+    * 0xF5 (Disable Data Reporting) - The mouse responds with "acknowledge" (0xFA) then disables data reporting and resets its movement counters.  This only effects data reporting in Stream mode and does not disable sampling.  Disabled stream mode funcions the same as remote mode.
+    * 0xF4 (Enable Data Reporting) - The mouse responds with "acknowledge" (0xFA) then enables data reporting and resets its movement counters.  This command may be issued while the mouse is in Remote Mode (or Stream mode), but it will only effect data reporting in Stream mode.
+    * 0xF3 (Set Sample Rate) - The mouse responds with "acknowledge" (0xFA) then reads one more byte from the host.  The mouse saves this byte as the new sample rate. After receiving the sample rate, the mouse again responds with "acknowledge" (0xFA) and resets its movement counters.  Valid sample rates are 10, 20, 40, 60, 80, 100, and 200 samples/sec.
+    * 0xF2 (Get Device ID) - The mouse responds with "acknowledge" (0xFA) followed by its device ID (0x00 for the standard PS/2 mouse.)  The mouse should also reset its movement counters.
+    * 0xF0 (Set Remote Mode) - The mouse responds with "acknowledge" (0xFA) then resets its movement counters and enters remote mode.
+    * 0xEE (Set Wrap Mode) - The mouse responds with "acknowledge" (0xFA) then resets its movement counters and  enters wrap mode.
+    * 0xEC (Reset Wrap Mode) - The mouse responds with "acknowledge" (0xFA) then resets its movement counters and enters the mode it was in prior to wrap mode (Stream Mode or Remote Mode.)
+    * 0xEB (Read Data) - The mouse responds with acknowledge (0xFA) then sends a movement data packet. This is the only way to read data in Remote Mode.  After the data packets has been successfully sent, it resets its movement counters.
+    * 0xEA (Set Stream Mode) - The mouse responds with "acknowledge" then resets its movement counters and enters steram mode.
+    * 0xE9 (Status Request) - The mouse responds with "acknowledge" then sends the following 3-byte status packet (then resets its movement counters.): 
+          o  
+
+            Byte 1  	
+            Bit 7
+            	
+            Bit 6
+            	
+            Bit 5
+            	
+            Bit 4
+            	
+            Bit 3
+            	
+            Bit 2
+            	
+            Bit 1
+            	
+            Bit 0
+            Always 0
+            	
+            Mode
+            	
+            Enable
+            	
+            Scaling
+            	
+            Always 0
+            	
+            Left Btn
+            	
+            Middle Btn
+            	
+            Right Btn
+            Byte 2 	
+            Resolution
+            Byte 3  	
+            Sample Rate
+
+            Right, Middle, Left Btn = 1 if button pressed; 0 if button is not pressed.
+            Scaling = 1 if scaling is 2:1; 0 if scaling is 1:1. (See commands 0xE7 and 0xE6)
+            Enable = 1 if data reporting is enabled; 0 if data reporting is disabled. (See commands 0xF5 and 0xF4)
+            Mode = 1 if Remote Mode is enabled; 0 if Stream mode is enabled. (See commands 0xF0 and 0xEA)
+             
+    * 0xE8 (Set Resolution) - The mouse responds with acknowledge (0xFA) then reads one byte from the host and again responds with acknowledge (0xFA) then resets its movement counters.  The byte read from the host determines the resolution as follows: 
+
+       
+      Byte Read from Host
+      	
+      Resolution
+      0x00
+      	
+      1 count/mm
+      0x01
+      	
+      2 count/mm
+      0x02
+      	
+      4 count/mm
+      0x03
+      	
+      8 count/mm
+
+    * 0xE7 (Set Scaling 2:1) - The mouse responds with acknowledge (0xFA) then enables 2:1 scaling (discussed earlier in this document.)
+    * 0xE6 (Set Scaling 1:1) - The mouse responds with acknowledge (0xFA) then enables 1:1 scaling (discussed earlier in this document.)
+
+The only commands the standard PS/2 mouse will send to the host are the "Resend" (0xFE) and "Error" (0xFC) commands.  They both work the same as they do as host-to-device commands. 
+
+Initialization:
+
+The PS/2 mouse is normally detected/initialized only when the computer is booting up.  That is, the mouse is not hot-pluggable and you must restart your computer whenever you add/remove a PS/2 mouse (furthermore, some motherboards may be damaged if you add/remove a PS/2 mouse while the computer is running.)
+
+The initial detection of the PS/2 mouse occurrs during POST.  If a mouse is detected, the BIOS will allow the operating system to configure/enable the mouse.  Otherwise, it will inhibit communication on the mouse's bus.  If you boot the computer with a mouse attached, then detach/reattach the mouse while in Windows, the OS may be able to detect the mouse was reattached.  Microsoft tried to support this, but it only works about 50% of the time.
+
+The following is the communication between my computer (running Win98SE) and mouse when it boots up with a standard PS/2 mouse attached.  It is fairly typical of how a PS/2 mouse is initialized and if you want to emulate a PS/2 mouse it must (at minimum) be able to support the following sequence of commands... 
+
+    * Power-on Reset:
+
+      Mouse: AA  Self-test passed
+      Mouse: 00  Mouse ID
+      Host:  FF  Reset command
+      Mouse: FA  Acknowledge
+      Mouse: AA  Self-test passed
+      Mouse: 00  Mouse ID
+      Host:  FF  Reset command
+      Mouse: FA  Acknowledge
+      Mouse: AA  Self-test passed
+      Mouse: 00  Mouse ID
+      Host:  FF  Reset command
+      Mouse: FA  Acknowledge
+      Mouse: AA  Self-test passed
+      Mouse: 00  Mouse ID
+      Host:  F3  Set Sample Rate   : Attempt to Enter Microsoft
+      Mouse: FA  Acknowledge       : Scrolling Mouse mode
+      Host:  C8  decimal 200       :
+      Mouse: FA  Acknowledge       :
+      Host:  F3  Set Sample Rate   :
+      Mouse: FA  Acknowledge       :
+      Host:  64  decimal 100       :
+      Mouse: FA  Acknowledge       :
+      Host:  F3  Set Sample Rate   :
+      Mouse: FA  Acknowledge       :
+      Host:  50  decimal 80        :
+      Mouse: FA  Acknowledge       :
+      Host:  F2  Read Device Type  :
+      Mouse: FA  Acknowledge       :
+      Mouse: 00  Mouse ID          : Response 03 if microsoft scrolling mouse
+      Host:  F3  Set Sample Rate 
+      Mouse: FA  Acknowledge
+      Host:  0A  decimal 10
+      Mouse: FA  Acknowledge
+      Host:  F2  Read Device Type
+      Mouse: FA  Acknowledge
+      Mouse: 00  Mouse ID
+      Host:  E8  Set resolution
+      Mouse: FA  Acknowledge
+      Host:  03  8 Counts/mm
+      Mouse: FA  Acknowledge
+      Host:  E6  Set Scaling 1:1
+      Mouse: FA  Acknowledge
+      Host:  F3  Set Sample Rate
+      Mouse: FA  Acknowledge
+      Host:  28  decimal 40
+      Mouse: FA  Acknowledge
+      Host:  F4  Enable
+      Mouse: FA  Acknowledge
+      Initialization complete...
+
+      If I then press the Left Button...
+      Mouse: 09 1 1 00001001; bit0 = Left button state; bit3 = always 1
+      Mouse: 00 1 1 No X-movement
+      Mouse: 00 1 1 No Y-movement
+      ... and release the Left Button:
+      Mouse: 08 0 1 00001000 bit0 = Left button state; bit3 = always 1
+      Mouse: 00 1 1 No X-movement
+      Mouse: 00 1 1 No Y-movement
+
+The following is the communication between my computer (running Win98SE) and mouse when it boots up with an (emulated) Intellimouse... 
+
+    * Power-on Reset:
+
+      Mouse: AA  Self-test passed
+      Mouse: 00  Mouse ID
+      Host:  FF  Reset command
+      Mouse: FA  Acknowledge
+      Mouse: AA  Self-test passed
+      Mouse: 00  Mouse ID
+      Host:  FF  Reset command
+      Mouse: FA  Acknowledge
+      Mouse: AA  Self-test passed
+      Mouse: 00  Mouse ID
+      Host:  FF  Reset command
+      Mouse: FA  Acknowledge
+      Mouse: AA  Self-test passed
+      Mouse: 00  Mouse ID
+      Host:  F3  Set Sample Rate   : Attempt to Enter Microsoft 
+      Mouse: FA  Acknowledge       : Scrolling Mouse mode
+      Host:  C8  decimal 200       :
+      Mouse: FA  Acknowledge       :
+      Host:  F3  Set Sample Rate   :
+      Mouse: FA  Acknowledge       :
+      Host:  64  decimal 100       :
+      Mouse: FA  Acknowledge       :
+      Host:  F3  Set Sample Rate   :
+      Mouse: FA  Acknowledge       :
+      Host:  50  decimal 80        :
+      Mouse: FA  Acknowledge       :
+      Host:  F2  Read Device Type  :
+      Mouse: FA  Acknowledge       :
+      Mouse: 03  Mouse ID          : Response 03 if microsoft scrolling mouse
+      Host:  E8  Set Resolution 
+      Mouse: FA  Acknowledge 
+      Host:  03  8 counts/mm
+      Mouse: FA  Acknowledge
+      Host:  E6  Set scaling 1:1
+      Dev:   FA  Acknowledge
+      Host:  F3  Set Sample Rate 
+      Mouse: FA  Acknowledge
+      Host:  28  decimal 40
+      Mouse: FA  Acknowledge
+      Host:  F4  Enable device 
+      Mouse: FA  Acknowledge
+
+      If I then press the left mouse button:
+      Mouse: 09  00001001 bit0 = Left button state; bit3 = always 1
+      Mouse: 00  No X-movement
+      Mouse: 00  No Y-movement
+      Mouse: 00  No Z-movement
+
+      ...and then release the left mouse button button:
+      Mouse: 08  00001000 bit0 = Left button state; bit3 = always 1
+      Mouse: 00  No X-movement
+      Mouse: 00  No Y-movement
+      Mouse: 00  No Z-movement
+
+After I downloaded/installed the Microsoft's Intellimouse drivers with support for the 4th and 5th buttons, the following sequence was found:
+
+    ... (starts same as before) ...
+    Host:  F3  Set Sample Rate   : Attempt to Enter Microsoft 
+    Mouse: FA  Acknowledge       : Scrolling Mouse mode.
+    Host:  C8  decimal 200       :
+    Mouse: FA  Acknowledge       :
+    Host:  F3  Set Sample Rate   :
+    Mouse: FA  Acknowledge       :
+    Host:  64  decimal 100       :
+    Mouse: FA  Acknowledge       :
+    Host:  F3  Set Sample Rate   :
+    Mouse: FA  Acknowledge       :
+    Host:  50  decimal 80        :
+    Mouse: FA  Acknowledge       :
+    Host:  F2  Read Device Type  :
+    Mouse: FA  Acknowledge       :
+    Mouse: 03  Mouse ID          : Response 03 if microsoft scrolling mouse.
+    Host:  F3  Set Sample Rate   : Attempt to Enter Microsoft 5-button 
+    Mouse: FA  Acknowledge       : Scrolling Mouse mode.
+    Host:  C8  decimal 200       :
+    Mouse: FA  Acknowledge       :
+    Host:  F3  Set Sample Rate   :
+    Mouse: FA  Acknowledge       :
+    Host:  C8  decimal 200       :
+    Mouse: FA  Acknowledge       :
+    Host:  F3  Set Sample Rate   :
+    Mouse: FA  Acknowledge       :
+    Host:  50  decimal 80        :
+    Mouse: FA  Acknowledge       :
+    Host:  F2  Read Device Type  :
+    Mouse: FA  Acknowledge       :
+    Mouse: 04  Mouse ID         : Response 04 if 5-button scrolling mouse.
+    ... rest of initialization same as before ...
+
+Emulation/Interfacing:
+
+    * Click here for routines that emulate a PS/2 mouse or keyboard
+    * Click here for routines that emulate a PS/2 host (ie, interface a mouse/keyboard)
+    * Click here for a fully-functional PS/2 mouse written for the PIC16F84.
+
+If you want to build a truely fully-implemented mouse or host, you should implement all of the features described in this document (except for, of course, the Microsoft Intellimouse extensions, which are optional).  However, at an absolute minimum, your device should operate as follows:
+
+    To Emulate a Mouse:
+
+        * Never send data when  the "Clock" line low.  If the host pulls the "Data" line low, prepare to read a byte from the host.
+        * ~500 milliseconds after powerup, transmit "0xAA, 0x00".
+        * Wait for the host to send the enable (0xF4) command before sending any movement/button data.
+        * Emulate the various mouse functions as follows:
+          Emulated Action
+          	
+          Data sent to host
+          Move up one
+          	
+          0x08,0x00,0x01
+          Move down one
+          	
+          0x28,0x00,0xFF
+          Move right one
+          	
+          0x08,0x01,0x00
+          Move left one
+          	
+          0x18,0xFF,0x00
+          Press left button
+          	
+          0x09,0x00,0x00
+          Release left button
+          	
+          0x08,0x00,0x00
+          Press middle button
+          	
+          0x0C,0x00,0x00
+          Release middle button
+          	
+          0x08,0x00,0x00
+          Press right button
+          	
+          0x0A,0x00,0x00
+          Release right button
+          	
+          0x08,0x00,0x00
+        * Respond to the "Reset" (0xFF) command with "0xFA" then goto the beginning of your program. (ie, send 0xAA, 0x00, then wait for the enable command before sending any movement/button data.)
+        * Respond to the "Get Device ID" (0xF2) command with "0xFA, 0x00".
+        * Respond to the "Status Request" (0xE9) command with "0xFA, 0x00, 0x02, 0x64".
+        * Respond to all other commands with acknowledge (0xFA).
+
+    To Interface a Mouse:
+
+        * Wait for the mouse to send "0xAA", then send the "Enable" (0xF4) command.
+        * The mouse will then send a 3-byte movement packets as described earlier in this document.
+
+
+Footnotes:
+
+    1) 2:1 scaling only applies to the automatic data reporting in Stream mode. It does not effect the reported data sent in response to the "Read Data" (0xEB) command.
+
+    2)  The mouse and host do not buffer "Resend" (0xFF) commands. This means "0xFE" will never be sent in response to the "Resend" command. 
+
+    3)   A "packet" may be a 3-byte movement data packet, a 4-byte movement data packet (for the Intellimouse), a 3-byte status packet (see "Status Request" [0xE9] command) a 2-byte completion-code-ID packet (0xAA,0x00 or 0xFC,0x00), or a 1-byte response to a command.
+
+    4)  A little advice from my own experience...  Even though bit 3 of the first byte in a movement data packet is supposed to be set, some drivers (such as the standard PS/2 mouse driver included with Windows 98SE) don't care and just ignore that bit.  However, other drivers do check that bit and if it is not set, it is considered an error.  I mention this so that, if you're designing a mouse, you double-check that this bit is set in every movement data packet sent by your mouse.  If it is not, your mouse may work properly when you test it on your computer, but it may not work on other computers that use different mouse drivers. 
+
+    For example, if using MS Intellimouse drivers and bit 3 of the first byte in a movement data packet is not set, the driver will discard that packet, then send the "Disable Data Reporting"  (0xF5) command, followed by the "Set Defaults" (0xF6) command, then it will reinitialize the mouse using the same command sequence as it does when Windows boots up (see the "Initialization" section above.)
+
+Other Sources / References:
+
+    * Adam's micro-Resources Home - This site's homepage.
+    * PS/2 Mouse/Keyboard Protocol - Protocol used by AT and PS/2 keyboards.
+    * Mouse Code/Projects - My mouse projects and source code.
+
+    * Holtek - Informative datasheets on many different PS/2 mice (and other peripherals).
+    * EMC - More inormative datasheets on many different PS/2 mice (and an ADB mouse).
+    * Synaptics Touchpad Interfacing Guide -Very informative!
+
+    * Adam Chapweske's Homepage - Information about me.
+    * Email me - Questions/comments?
+
+

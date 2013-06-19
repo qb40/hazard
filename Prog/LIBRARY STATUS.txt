@@ -1,0 +1,31 @@
+MAIN
+Tick::
+SUB	HZDstart()
+SUB	HZDstop()
+FUN	HZDlastError%()
+
+MEMORY
+Tick::
+FUN	HZDgetMemory&(type%, SEG1%, OFF1&)
+SUB	HZDcopyMemory(srctype%, srcSEG%, src OFF&, destype%, desSEG%, desOFF&, length%)
+SUB	HZDcopyString(srctype%, srcSEG%, src OFF&, destype%, desSEG%, desOFF&)
+SUB	HZDputString(type%, SEG1%, OFF1&)
+FUN	HZDgetString$(type%, SEG1%, OFF1&)
+
+GRAPHICS
+Tick::
+SUB	HZDselectGraphicsPage(page%)
+SUB	HZDpset(x%, y%, clr%)
+FUN	HZDpoint%(x%, y%)
+SUB	HZDdisplayGraphics()
+SUB	HZDclearPage()
+SUB	HZDsavePage()
+SUB	HZDloadPage()
+SUB	HZDgetPart(type%, SEG1%, OFF1&, x1%, y1%, x2%, y2%)
+SUB	HZDputPart(type%, SEG1%, OFF1&, x%, y%)
+SUB	HZDsetGraphicsRange(x1%, y1%, x2%, y2%)
+NoTest::
+SUB	HZDsetRefreshRate(rate%)
+SUB	HZDtakeScreenshot(type%, SEG1%, OFF1&, xsz%, ysz%)
+
+

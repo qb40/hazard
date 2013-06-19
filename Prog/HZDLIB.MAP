@@ -1,0 +1,50 @@
+
+ Start  Stop   Length Name                   Class
+ 00000H 00045H 00046H MAIN_TEXT              CODE
+ 00046H 0074AH 00705H MEMORY_TEXT            CODE
+ 0074CH 00AE7H 0039CH FILE_TEXT              CODE
+ 00AE8H 00D81H 0029AH PALETTE_TEXT           CODE
+ 00D82H 00F17H 00196H TIME_TEXT              CODE
+ 00F18H 01657H 00740H GRAPHICS_TEXT          CODE
+ 01658H 01B98H 00541H CODE                   CODE
+ 01BA0H 01E48H 002A9H _TEXT                  CODE
+ 01E50H 01E50H 00000H FAR_DATA               FAR_DATA
+ 01E50H 01E50H 00000H FAR_BSS                FAR_BSS
+ 01E50H 05166H 03317H NULL                   BEGDATA
+ 05168H 0536FH 00208H _DATA                  DATA
+ 05370H 05370H 00000H XIB                    DATA
+ 05370H 05370H 00000H XI                     DATA
+ 05370H 05370H 00000H XIE                    DATA
+ 05370H 05370H 00000H XPB                    DATA
+ 05370H 05370H 00000H XP                     DATA
+ 05370H 05370H 00000H XPE                    DATA
+ 05370H 05370H 00000H XCB                    DATA
+ 05370H 05370H 00000H XC                     DATA
+ 05370H 05370H 00000H XCE                    DATA
+ 05370H 05375H 00006H _BSS                   DATA
+ 05376H 0537BH 00006H NMALLOC                BC_VARS
+ 0537CH 0537CH 00000H ENMALLOC               BC_VARS
+ 0537CH 0537CH 00000H BC_SAB                 BC_SEGS
+ 0537CH 0537FH 00004H BC_SA                  BC_SEGS
+ 05380H 05380H 00000H XOB                    BSS
+ 05380H 05380H 00000H XO                     BSS
+ 05380H 05380H 00000H XOE                    BSS
+ 05380H 05E7FH 00B00H STACK                  STACK
+ 05E80H 06E8FH 01010H SYMBOL                 
+
+ Origin   Group
+ 01E5:0   DGROUP
+
+Program entry point at 05E8:0000
+
+Unresolved externals:
+
+
+VIDEOTASK in file(s):
+ HZDLIB.LIB(palette.ASM)
+WINDOWSACTIVE in file(s):
+ HZDLIB.LIB(file.ASM)
+PCSPEAKERACTIVE in file(s):
+ HZDLIB.LIB(time.ASM)
+PLAYPCSOUNDISR in file(s):
+ HZDLIB.LIB(time.ASM)

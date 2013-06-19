@@ -1,0 +1,4 @@
+Timer IRQ 0 INT 8
+INT 1C for extras
+byte 40:70=timer overflow since midnight
+dword 40:6c=18.2Hz

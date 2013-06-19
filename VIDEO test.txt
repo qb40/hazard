@@ -1,0 +1,99 @@
+if(readpointer>=250)Copy256bytes();
+
+filepointer
+Keeps track of the location of file which is to be used
+
+readpointer
+Keeps track of location from which data is to be read
+from the 256 bytes buffer.
+
+slidebytesleft
+Keeps track of the actual number of bytes left in a slide
+
+modebytesread
+Keeps track of the bytes(in uncompressed image)
+that have been read in the current mode
+
+modebytesleft
+Keeps track of the display bytes left in the current mode
+
+imagebytesread
+Keeps track of the image address in slide(not actual, but
+in the uncompressed image)
+
+skipbytesleft
+Keeps track of the number of bytes that have to be skipped
+in the current mode(this refers to the bytes in the
+uncompressed image and not the actual byes left)
+
+
+
+skipbytesmode1(bytes)
+{
+filepointer+=bytes;
+readpointer+=bytes;
+slidebytesleft-=bytes;
+modebytesread+=bytes
+imagebytesread+=bytes;
+skipbytesleft-=bytes;
+}
+
+skipbytesmode2(bytes)
+{
+filepointer+=(bytes+(modebytesread & 1))\2;
+readpointer+=(bytes+(modebytesread & 1))\2;
+slidebytesleft-=(bytes+(modebytesread & 1))\2;
+modebytesread+=bytes;
+imagebytesread+=bytes;
+skipbytesleft-=bytes;
+}
+
+skipbytesmode3(bytes)
+{
+filepointer+=1;
+readpointer+=1;
+slidebytesleft-=1;
+modebytesread+=bytes;
+imagebytesread+=bytes;
+skipbytesleft-=bytes;
+}
+
+skipbytesmode4(bytes)
+{
+filepointer+=1;
+readpointer+=1;
+slidebytesleft-=1;
+modebytesread+=bytes;
+imagebytesread+=bytes;
+skipbytesleft-=bytes;
+}
+
+
+GetMode()
+{
+currentmode=byte[readpointer];
+readpointer+=1;
+modebytesread=0;
+modebytessize=dword[readpointer];
+}
+
+
+skipbytes(bytes)
+{
+Copy256bytes();
+while
+{
+	GetMode();
+	bytes2=Min(bytes, modebytessize);
+	switch(currentmode)
+	{
+	case 1:skipbytesmode1(bytes2);
+	case 2:skipbytesmode2(bytes2);
+	case 3:skipbytesmode3(bytes2);
+	case 4:skipbytesmode4(bytes2);
+	}
+bytes-=bytes2;
+if(readpointer>=250)Copy256bytes;
+}
+return();
+}
